@@ -77,6 +77,50 @@ Dashboard tables created successfully. Fact table contains 789516 valid revenue 
 
 The full table contents can be queried with `SELECT *`; only representative rows are documented here to keep the README readable.
 
+#### Representative `SELECT *` output
+
+The following tables show the first three rows returned from each Task C table.
+
+**`dim_category`**
+
+| category_id | category_name | department | gst_rate |
+|---|---|---|---:|
+| C01 | Biscuits & Snacks | Food | 0.180 |
+| C02 | Dairy | Fresh | 0.050 |
+| C03 | Beverages | Food | 0.180 |
+
+**`dim_product`**
+
+| product_sk | product_code | product_name | category_id | brand | pack_size | uom | valid_from | valid_to | is_current |
+|---:|---|---|---|---|---|---|---|---|---|
+| 1001 | P100005 | Thums Up Mango Juice 250g | C03 | Thums Up | 250g | EA | 2019-04-01 | 9999-12-31 | true |
+| 1002 | P100007 | Vim Dishwash Bar 1kg | C08 | Vim | 1kg | EA | 2019-04-01 | 9999-12-31 | true |
+| 1003 | P100019 | Sunfeast Cookies 150g | C01 | Sunfeast | 150g | EA | 2019-04-01 | 9999-12-31 | true |
+
+**`dim_store`**
+
+| store_id | store_name | city | state | region | floor_area_sqft | opened_on |
+|---|---|---|---|---|---:|---|
+| S01 | Annapurna Jayanagar | Bengaluru | Karnataka | South | 8,200 | 2011-01-01 |
+| S02 | Annapurna Koramangala | Bengaluru | Karnataka | South | 6,400 | 2012-04-06 |
+| S03 | Annapurna T Nagar | Chennai | Tamil Nadu | South | 9,100 | 2013-07-11 |
+
+**`fact_sales`**
+
+| bill_no | line_no | store_id | product_sk | quantity | unit_price | line_revenue | business_date | day_of_week | sales_month | line_type |
+|---|---:|---|---:|---:|---:|---:|---|---|---|---|
+| S01/20241206/00036 | 3 | S01 | 1003 | 2.0 | 74.65 | 149.30 | 2024-12-06 | Friday | December | SALE |
+| S01/20241207/00037 | 4 | S01 | 1003 | 1.0 | 74.65 | 74.65 | 2024-12-07 | Saturday | December | SALE |
+| S01/20241204/00013 | 2 | S01 | 1004 | 1.0 | 315.91 | 315.91 | 2024-12-04 | Wednesday | December | SALE |
+
+**`sales_fact`**
+
+| bill_no | line_no | product_code | quantity | unit_price | line_type | timestamp |
+|---|---:|---|---:|---:|---|---|
+| S01/20241201/00001 | 1 | P104155 | 2.0 | 144.69 | SALE | 2024-12-01 10:23:38+05:30 |
+| S01/20241201/00001 | 2 | P102415 | 3.0 | 1245.81 | SALE | 2024-12-01 10:23:38+05:30 |
+| S01/20241201/00001 | 3 | P105075 | 2.0 | 49.58 | SALE | 2024-12-01 10:23:38+05:30 |
+
 ### Task D: Historical Pricing Query - Completed
 - Uses `price_revisions.selling_price` for point-in-time historical revenue.
 - Joins prices by `product_sk` and the sale business date within `effective_from` and `effective_to`.
