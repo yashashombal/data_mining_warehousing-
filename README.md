@@ -136,7 +136,7 @@ Report for October 2024: Total Revenue = 41,527,914.62
 
 Execution tree:
 
-```text
+
 EXPLAIN ANALYZE
 └── HASH_GROUP_BY
 	├── Group key: category_name
@@ -147,11 +147,32 @@ EXPLAIN ANALYZE
 			└── HASH_JOIN: products.category_id = product_categories.category_id
 				├── POSTGRES_SCAN: pg.products
 				└── POSTGRES_SCAN: pg.product_categories
-```
 
-Run from `data-mining-lab-1/Question1`:
+## Task F: Monthly Revenue Reconciliation - Completed
+- Added `finance_monthly.csv` as the finance source file.
+- Updated `Question1/reconcile.py` to find the CSV at the project root.
+- Mapped the actual `revenue_inr` column and `YYYY-MM` month format.
+- Compared finance revenue with the DuckDB `fact_sales` pipeline revenue for all 12 months.
+- Printed results directly without requiring pandas or numpy.
 
-```powershell
-py .\cross_system_query.py
-```
+Terminal output:
+
+
+Monthly Revenue Reconciliation (Pipeline vs. Finance):
+month | finance_revenue | pipeline_revenue | variance
+2024-01 | 38446071.33 | 27247666.469998613 | -11198404.860001385
+2024-02 | 34887085.55 | 24801383.99999826 | -10085701.550001737
+2024-03 | 42457899.09 | 29694679.189998094 | -12763219.90000191
+2024-04 | 37958457.37 | 27089951.509998478 | -10868505.86000152
+2024-05 | 41764716.4 | 30000211.51999857 | -11764504.88000143
+2024-06 | 38987082.82 | 27925693.859998554 | -11061388.960001446
+2024-07 | 40527291.81 | 28741506.90999873 | -11785784.900001273
+2024-08 | 45252181.75 | 31792176.029998995 | -13460005.720001005
+2024-09 | 44615037.46 | 31671539.39999967 | -12943498.06000033
+2024-10 | 56359195.92 | 40285483.399999924 | -16073712.520000078
+2024-11 | 51583838.47 | 36956115.220000096 | -14627723.249999903
+2024-12 | 50745209.0 | 36306190.730000764 | -14439018.269999236
+
+
+
 
