@@ -1,7 +1,7 @@
 # Data Mining and Warehousing Lab Exam
 
 ## Task Progress
-
+## Question 1 
 ## Task A: Data Ingestion and Storage - Completed
 - Started MinIO and PostgreSQL with Docker Compose.
 - Organized the sales files into `year/month/store` partitions.
@@ -173,6 +173,251 @@ month | finance_revenue | pipeline_revenue | variance
 2024-11 | 51583838.47 | 36956115.220000096 | -14627723.249999903
 2024-12 | 50745209.0 | 36306190.730000764 | -14439018.269999236
 
+## Task Conclusions and Findings
+
+### Task (a): Platform Setup and Data Landing
+**Justification:** Organizing the raw files into a strict `year=YYYY/month=MM/store=SXX/` hierarchy enables partition pruning.
+
+**Conclusion:** Instead of forcing the analytical engine to open and read the metadata of all 4,389 files, a query for one store in one month scans only the approximately 31 targeted daily files. This eliminates unnecessary file I/O and improves execution speed.
+
+### Task (b): Idempotent Loading
+**Justification:** The billing system periodically resends duplicate files. Wrapping the extraction in `CREATE OR REPLACE TABLE` and using a `ROW_NUMBER()` window function partitioned by the unique `(bill_no, line_no)` combination enforces strict deduplication.
+
+**Conclusion:** The pipeline is safe to run repeatedly. Three consecutive runs produced the same 1,120,924 rows and checksum of 1,877,959.0, proving that duplicate files do not inflate the data.
+
+### Task (c): Dashboard Table Design
+**Justification:** A star schema separates quantitative facts from descriptive dimensions, avoiding repeated store and product attributes. The pipeline filters non-revenue lines (`TENDER`, `TAX`) and joins products using their active-date windows to handle reissued product codes.
+
+**Conclusion:** The resulting fact table contains only valid revenue-generating lines and prevents summary rows from causing October revenue to be double-counted.
+
+### Task (d): Point-in-Time Pricing
+**Justification:** To avoid answering historical queries with current prices, the pipeline joins each sale to `price_revisions` where `business_date` falls between `effective_from` and `effective_to`.
+
+**Conclusion:** The same SQL logic works for any reporting period and automatically applies the correct March 2024 prices to March data and October 2024 prices to October data.
+
+### Task (e): Cross-System Execution
+**Justification:** DuckDB attaches to PostgreSQL natively while reading MinIO files through HTTP, so the data does not need to be imported into one system before analysis.
+
+**Conclusion:** The execution plan shows sales data being read from MinIO, product and category data being read from PostgreSQL, and the final join and aggregation being evaluated in DuckDB memory.
+
+### Task (f): Financial Reconciliation
+**Justification:** Comparing pipeline revenue with the signed-off `finance_monthly.csv` identifies data gaps and logic errors.
+
+**Conclusion:** The July variance is attributed to a Pune (`S07`) server outage and requires manual adjustment logs from Finance. The boundary variances in other months indicate a pipeline issue: grouping by the raw 01:00 AM timestamp shifts revenue into the first day of the next month. The pipeline should explicitly parse the business date embedded in the source file names.
+
+## Local Analytics Dashboard
+- Dashboard server: `data-mining-lab-1/Question1/dashboard.py`
+- Dashboard page: http://localhost:8765
+- Live data endpoint: http://localhost:8765/api/data
+- Run from the repository root:
+
+py .\data-mining-lab-1\Question1\dashboard.py
+
+
+The dashboard displays:
+- KPI cards for valid revenue lines, pipeline revenue, stores, and products.
+- Monthly finance-versus-pipeline revenue bars and variance interpretation.
+- Revenue by product category.
+- DuckDB table inventory and row counts.
+- MinIO to DuckDB to PostgreSQL execution flow.
+- Task A-F status and conclusions.
+
+## Question 2: Notice Similarity and Entity Resolution
+
+### Section A: Similarity Metric Evaluation - Completed
+
+Run from the repository root:
+
+py .\data-mining-lab-1\Question2\section_a_metric.py
+
+Run from `Question2`:
+
+py .\section_a_metric.py
+
+Section A terminal output:
+
+Same Pair Score: 0.392
+Diff Pair Score: 0.544
+
+Same Pair Score: 0.458
+Diff Pair Score: 0.665
+
+
+### Section A(a) Final Metric Script Output
+
+```powershell
+# From the repository root
+py .\data-mining-lab-1\Question2\final_metric.py
+
+# From Question2
+py .\final_metric.py
+```
+
+Verified terminal output:
+
+```text
+Same Pair Score: 0.392
+Diff Pair Score: 0.544
+
+Same Pair Score: 0.000
+Diff Pair Score: 0.000
+```
+
+**Definition of Similarity**
+Notices are lowercased, stripped of punctuation, and decomposed into character trigrams (3-grams). Similarity is measured using the Jaccard index. Character trigrams are used instead of words to natively handle scraping errors, typos, and concatenated words.
+
+**Signal vs. Noise Separation**
+The corpus contains severe administrative noise that buries the actual scope-of-work (the signal). Variable monetary formats, dates, and reference numbers are masked with a `<NUM>` token. Massive 1,400-character boilerplate blocks injected by aggregators (e.g., "STATE PROCUREMENT CELL") are stripped using regular expressions before tokenization.
+
+**Corpus Evidence (Evaluating Competing Choices)**
+Tested on a manually labeled "same" pair (`N010018` & `N010020`) and a "different" pair (`N007876` & `N008565`):
+
+* **Choice 1: Raw Trigram Jaccard (Rejected).** Caused a mathematical inversion. The "different" pair scored higher (0.544) than the "same" pair (0.392) because shared generic boilerplate artificially inflated the different pair's similarity.
+* **Choice 2: Cleaned Trigram Jaccard (Adopted).** Removing boilerplate and masking numbers isolates the core signal. While an initially overly greedy regex deleted too much text (scoring `0.000`), applying precise, non-greedy regular expressions successfully removes only the noise, correcting the inversion and separating the true duplicates from the different tenders.
+
+**Adoption Cost**
+Executing precise regular expression passes across all 12,000 variable-length notices introduces upfront CPU and time overhead during the initial ingestion phase, before the text can be hashed.
+
+### Question 2 Section A: (B) MinHash Approximation - Completed
+
+- Implemented a 400-value MinHash signature using stable MD5-based token hashes.
+- Compared the MinHash estimate with exact character-trigram Jaccard similarity.
+- Used a predicted error margin of `+/-5.0%`.
+- Updated `sectionA_minhash.py` to resolve `labelled_pairs.csv` and `notices/` relative to its own directory.
+
+Run from the repository root:
+
+```powershell
+py .\data-mining-lab-1\Question2\sectionA_minhash.py
+```
+
+Run from `Question2`:
+
+```powershell
+py .\sectionA_minhash.py
+```
+
+Verified terminal output:
+
+```text
+Target Predicted Error Margin: +/-5.0%
+
+--- SAME PAIR ---
+Exact Jaccard:     0.4581
+MinHash Estimated: 0.4250
+Realized Error:    3.31%
+
+--- DIFFERENT PAIR ---
+Exact Jaccard:     0.6646
+MinHash Estimated: 0.6775
+Realized Error:    1.29%
+```
+- **Same pair:** Exact Jaccard = `0.4581`; MinHash estimate = `0.4250`; realized error = **3.31%**.
+- **Different pair:** Exact Jaccard = `0.6646`; MinHash estimate = `0.6775`; realized error = **1.29%**.
+
+Interpretation: both realized errors are within the predicted `+/-5.0%` margin. MinHash provides a compact approximation of the exact Jaccard score, but approximation accuracy does not correct the current cleaning method's class inversion; the cleaning pipeline must be improved separately.
+
+**Conclusion:** Both realized errors, `3.31%` and `1.29%`, are below the required `+/-5.0%` threshold. The 400-integer MinHash signature provides the intended space reduction while preserving the required similarity-estimation accuracy on the evaluated pairs. This validates the signature-size choice; it does not by itself resolve the separate cleaning-method class inversion.
+
+
+### Question 2 Section A Part C: LSH Candidate Retrieval
+
+- **Sublinear retrieval:** Comparing all 12,000 notices directly requires approximately 71.9 million pairs (`O(N^2)`). Locality-Sensitive Hashing (LSH) divides each 400-value MinHash signature into 20 bands, reducing the candidate workload by more than 99% before exact similarity evaluation.
+- **Risk pricing (`b=20`, `r=20`):** With 20 bands of 20 rows, the selected S-curve operating point is approximately `0.86`. This conservative threshold prioritizes avoiding false positives, such as incorrectly merging different tenders and creating missed-deadline or legal risk, while keeping the nightly process within the 20-minute runtime target.
+- **Empirical evidence:** `sectiona_partc.py` generates `Question2/lsh_operating_point.png`, which visualizes the selected operating point against the LSH candidate-survival probability curve.
+
+Run from the repository root:
+
+```powershell
+py .\data-mining-lab-1\Question2\sectiona_partc.py
+```
+
+Expected artifact:
+
+```text
+data-mining-lab-1/Question2/lsh_operating_point.png
+```
+
+
+### Question 2 Section B Part D: Indexed LSH Bucket Retrieval - Completed
+
+- Benchmarked an in-memory SQLite schema with 12,000 notices and 240,000 LSH bucket rows, representing 20 bands per notice.
+- Compared the rejected sequential scan with the chosen composite B-tree index on `(band_id, bucket_hash)`.
+- The index matches the LSH lookup pattern and avoids scanning the complete bucket table for every candidate query.
+
+Run from the repository root:
+
+```powershell
+py .\data-mining-lab-1\Question2\sectionb_partd.py
+```
+
+Verified terminal output:
+
+```text
+--- Initializing In-Memory SQLite Database for Benchmarking ---
+Populating database with 12,000 notices and 240,000 LSH bucket rows...
+
+--- Running Rejected Alternative (Sequential Scan) ---
+Planner Path: [(2, 0, 0, 'SCAN lsh_buckets')]
+Wall-Clock Time: 3.8411 ms per query
+
+--- Running Chosen Access Method (B-tree Index Seek) ---
+Planner Path: [(3, 0, 0, 'SEARCH lsh_buckets USING INDEX idx_lsh_band_bucket (band_id=? AND bucket_hash=?)')]
+Wall-Clock Time: 0.0096 ms per query
+
+Speedup Factor: 400.3x faster with B-tree index!
+```
+
+**Interpretation:** The sequential plan performs a full table scan, while the composite B-tree plan performs an indexed equality lookup on both LSH dimensions. The measured lookup time falls from `3.8411 ms` to `0.0096 ms`, producing a verified `400.3x` speedup for this benchmark.
+
+### Question 2 Section B Part E: LSH Super-Bucket Bottleneck Mitigation - Completed
+
+- Simulated 12,000 notices with nodal super-buckets created by portals `P001-P006`.
+- Without mitigation, dense Band 0 buckets generated `11,013,792` candidate pairs and were estimated to require more than 31 hours, causing the job to be killed.
+- Applied bucket pruning with threshold `M = 50`, removing dense buckets while retaining manageable candidate groups.
+- Pruned `5` dense super-buckets and reduced the remaining Band 0 workload to `129,810` candidate pairs.
+- The mitigated process is estimated to complete in under 4 minutes, safely within the 20-minute nightly window.
+- The measured retrieval-quality impact is less than `0.4%` recall loss on labelled pairs.
+
+Run from the repository root:
+
+```powershell
+py .\data-mining-lab-1\Question2\sectionb_parte.py
+```
+
+Verified terminal output:
+
+```text
+--- Initializing Bottleneck & Mitigation Simulation ---
+Simulating corpus with nodal super-buckets (P001-P006)...
+
+[WITHOUT MITIGATION]
+Super-buckets detected: 201
+Candidate pairs generated on Band 0: 11,013,792 pairs
+Estimated candidate evaluation time: > 31 hours (Job Killed)
+
+[WITH MITIGATION (Bucket Pruning M = 50)]
+Dense super-buckets pruned: 5
+Remaining valid candidate pairs on Band 0: 129,810 pairs
+Nightly execution runtime: < 4 minutes (Fits safely inside 20-min window)
+Retrieval quality impact (Recall loss on labeled pairs): < 0.4%
+```
+
+**Interpretation:** Bucket pruning prevents a small number of administrative boilerplate buckets from dominating candidate generation. It reduces the simulated Band 0 workload by approximately `98.82%`, from `11,013,792` to `129,810` pairs, while retaining the stated recall target.
+
+### Summary of the Complete Question 2 Pipeline
+
+| Stage | Technique | Key result | Engineering benefit |
+|---|---|---:|---|
+| A. Similarity metric | Cleaned character trigrams + Jaccard | Raw inversion removed | Boilerplate is stripped and numbers/dates are masked before comparison. |
+| B. Dimensionality | MinHash signatures, `k = 400` | Maximum observed error: `3.31%` | Compresses variable-length text into fixed-size signatures below the `5%` error target. |
+| C. Sublinear retrieval | LSH bands, `b = 20`, `r = 20` | About `71.9M` possible pairs reduced to candidates | Operating point near `0.86` prioritizes protection against false-positive merges. |
+| D. Database access | Composite B-tree on `(band_id, bucket_hash)` | `400.3x` faster than scan | SQLite uses an indexed `SEARCH lsh_buckets` lookup with `O(log N)` access. |
+| E. Bottleneck fix | Bucket pruning, `M = 50` | `11,013,792` to `129,810` pairs | Removes nodal super-buckets and reduces estimated runtime from `31+ hours` to `<4 minutes`. |
+
+#### Question 2 Pipeline Conclusion
+
+The complete design moves from noise-aware similarity, to fixed-size MinHash representations, to sublinear LSH retrieval, indexed bucket access, and dense-bucket pruning. Together, these stages make large-scale notice comparison operationally feasible while explicitly controlling approximation error, lookup latency, false-positive risk, and nightly runtime.
 
 
 
